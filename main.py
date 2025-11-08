@@ -1,7 +1,9 @@
-import time, random
+import time, random, re
 from functools import lru_cache
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, VideoUnavailable, NoTranscriptFound
 from fastapi import FastAPI, HTTPException
+
+app = FastAPI()
 
 MAX_RETRIES = 5
 BASE_SLEEP = 1.5  # giây
@@ -52,6 +54,23 @@ def fetch_with_backoff(video_id: str, languages: list[str]):
             sleep = BASE_SLEEP * (2 ** (attempt - 1)) + random.uniform(0.2, 0.8)
             time.sleep(sleep)
     raise last_err
+
+def extract_video_id(url: str) -> str | None:
+    """Extract YouTube video ID from various URL formats."""
+    # Pattern matches youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID, etc.
+    patterns = [
+        r'(?:v=|/)([0-9A-Za-z_-]{11}).*',
+        r'youtu\.be/([0-9A-Za-z_-]{11})',
+        r'embed/([0-9A-Za-z_-]{11})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    # If no pattern matches, check if it's just the video ID itself
+    if re.match(r'^[0-9A-Za-z_-]{11}$', url):
+        return url
+    return None
 
 @app.get("/transcript")
 def transcript(url: str, langs: str = "en,vi,auto,ja,es,pt,fr,de,id,ms"):
